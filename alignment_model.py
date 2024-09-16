@@ -30,7 +30,7 @@ class AlignmentModel:
     self.img = self._load_image()
     
     b_channel, g_channel, r_channel = self._crop_and_divide_image()
-    delta = (5, 8)
+    delta = (10, 10)
 
     # Align Green and Blue channels to the Red channel
     g_shift = self._align_pairs(r_channel, g_channel, delta)
@@ -44,14 +44,6 @@ class AlignmentModel:
 
     # Stack the channels to create the final RGB image
     self.rgb = torch.stack([aligned_r, aligned_g, aligned_b], dim=0)
-
-    # Save the RGB image
-    self.save('aligned_image.png')
-
-
-  def save(self, output_name):
-    torchvision.utils.save_image(self.rgb, output_name)
-
 
   def _load_image(self):
     """Load the image from the image_name path,
@@ -84,7 +76,6 @@ class AlignmentModel:
 
     # Divide the image into three parts
     h_third = cropped_img.shape[1] // 3
-    remainder = cropped_img.shape[1] % 3
 
     b_channel = cropped_img[:, :h_third]
     g_channel = cropped_img[:, h_third:2 * h_third]
@@ -159,5 +150,5 @@ class AlignmentModel:
                 best_score = score
                 align_idx = (dx, dy)
 
-    # print(align_idx)
+    print(align_idx)
     return align_idx

@@ -9,3 +9,9 @@ conda activate alignenv
 ## Install the dependencies using:- 
 
 pip install -r config/requirements.txt
+
+## Run the code using:-
+
+python3 main.py -i data/6.jpg -m mse
+
+python3 main.py -i all
