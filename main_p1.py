@@ -1,7 +1,8 @@
 """Implements alignment algorithm."""
 
 import argparse
-from alignment_model import AlignmentModel
+from alignment_model_assignment_2 import AlignmentModel_2
+# from alignment_model_assignment_2 import AlignmentModel_1
 
 
 def main():
@@ -17,7 +18,7 @@ def main():
     run_all()
     return
 
-  model = AlignmentModel(args.image_name, metric=args.metric)
+  model = AlignmentModel_2(args.image_name, metric=args.metric)
   model.align()
   model.save('%s_%s_aligned.png' %
              (args.image_name.split('.')[0], args.metric))
@@ -25,10 +26,19 @@ def main():
 
 def run_all():
   """Run the alignment model on all images."""
-  for metric in ['ncc', 'mse', 'ssim']:
+  # Assignment 1
+  # for metric in ['ncc', 'mse', 'ssim']:
+  #   for image_name in range(1, 7):
+  #     image_name = 'data/%d.jpg' % image_name
+  #     model = AlignmentModel_1(image_name, metric=metric)
+  #     model.align()
+  #     model.save('%s_%s_aligned.png' % (image_name.split('.')[0], metric))
+
+  # Assignment 2
+  for metric in ['ncc', 'mse']:
     for image_name in range(1, 7):
       image_name = 'data/%d.jpg' % image_name
-      model = AlignmentModel(image_name, metric=metric)
+      model = AlignmentModel_2(image_name, metric=metric)
       model.align()
       model.save('%s_%s_aligned.png' % (image_name.split('.')[0], metric))
 

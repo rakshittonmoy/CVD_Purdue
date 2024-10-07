@@ -10,8 +10,12 @@ conda activate alignenv
 
 pip install -r config/requirements.txt
 
-## Run the code using:-
+## Assignment 1:- Run the code using:-
 
-python3 main.py -i data/6.jpg -m mse
+python3 main_p1.py -i data/6.jpg -m mse
 
-python3 main.py -i all
+python3 main_p1.py -i all
+
+## Assignment 2:- Run the code using:-
+
+python3 main_p2.py -i all -s 1.8 -k 25 -n 15

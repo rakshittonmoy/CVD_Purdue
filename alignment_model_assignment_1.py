@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 import numpy as np
 import matplotlib.pyplot as plt
 
-class AlignmentModel:
+class AlignmentModel_1:
   def __init__(self, image_name, metric='ssim', padding='circular'):
     # Image name
     self.image_name = image_name
