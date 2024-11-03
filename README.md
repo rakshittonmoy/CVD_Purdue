@@ -19,3 +19,7 @@ python3 main_p1.py -i all
 ## Assignment 2:- Run the code using:-
 
 python3 main_p2.py -i all -s 1.8 -k 25 -n 15
+
+## Assignment 3:- Run the code using:-
+
+python3 main.py
