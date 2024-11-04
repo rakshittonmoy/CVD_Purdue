@@ -5,10 +5,11 @@ import torch
 import kornia
 import cv2
 import torch.nn.functional as F
-from helpers import plot_inlier_matches, harris, get_pixel_descriptors
+from helpers import plot_inlier_matches, harris, get_pixel_descriptors, get_hynet_descriptors
 import matplotlib.pyplot as plt
 from skimage.transform import ProjectiveTransform, warp
 from scipy.ndimage import gaussian_filter
+from torchvision import models
 
 
 
@@ -33,7 +34,7 @@ class ImageStitcher(object):
     filtering = True
     if filtering:
       # Create the Gaussian filter parameters
-      sigma = 0
+      sigma = 1.5
 
       # Apply Gaussian filter to both images 
       im_gauss_filt_left = gaussian_filter(self.img1.squeeze(), sigma=sigma) # squeeze is gonna remobve 1,1
@@ -49,18 +50,21 @@ class ImageStitcher(object):
     self.desc1 = self._get_descriptors(im_gauss_filt_left, self.keypoints1)
     self.desc2 = self._get_descriptors(im_gauss_filt_right, self.keypoints2)
 
+    print("Descriptors", self.desc1)
+
     # Compute putative matches and match the keypoints.
     matched_keypoints = self._get_putative_matches(self.keypoints1, self.keypoints2, self.desc1, self.desc2)
-    print("Length of matched keypoints", matched_keypoints.size())
 
     # Perform RANSAC to find the best homography and inliers
-    best_inliers, best_homography, _ = self._ransac(matched_keypoints)
+    best_inliers, best_homography, mean_residual = self._ransac(matched_keypoints)
 
-    print("best ones", best_inliers)
+    print("Number of inliers", len(best_inliers))
+
+    print("Mean Residual", mean_residual)
 
     self._visualize_inliers(self.img1, self.img2, matched_keypoints, best_inliers)
 
-    # `best_inliers` is a boolean mask; retrieve the indices of inliers
+    # Retrieve the indices of inliers
     inlier_indices = torch.where(best_inliers)[0]  # Get indices where inliers are True
 
     # Now, filter `matched_keypoints` using inlier indices
@@ -77,24 +81,15 @@ class ImageStitcher(object):
     plt.savefig(f'inlier_matches_{self.descriptor_type}.png')
 
     # Refit with all inliers to get the final homography
-    #final_homography = None 
-    stitched = self.stitch_images_new(img1, img2, best_homography) 
+    stitched = self.stitch_images(img1, img2, best_homography) 
 
     plt.gray()
     plt.savefig('stitched_%s.png' % self.descriptor_type)
 
-  def _get_keypoints(self, img):
-    """
-    Extract keypoints from the image.
+    plt.imshow(stitched, cmap='gray')
+    plt.axis('off')  # Turn off axis labels
+    plt.show()  # Display the image
 
-    Inputs:
-        img: h x w tensor.
-    Outputs:
-        keypoints: N x 2 numpy array.
-    """
-    keypoints = harris(img) 
-    return keypoints
-  
   def _get_keypoints(self, img):
     # Get Harris responses
     keypoints = harris(img)
@@ -136,30 +131,32 @@ class ImageStitcher(object):
     if self.descriptor_type == 'pixel':
       descriptors = get_pixel_descriptors(image, keypoints) 
     elif self.descriptor_type == 'hynet':
-      descriptors = None
-
+      # Load a pre-trained model
+      model = models.resnet18(pretrained=True)
+      # Remove the last layer to obtain features
+      model = torch.nn.Sequential(*(list(model.children())[:-1]))
+      descriptors = get_hynet_descriptors(image, keypoints, model)
+      
     # Convert the list of numpy array to numpy array first, then to torch tensor
     desc = np.array(descriptors)
 
     # Now convert the numpy arrays to torch tensors
     descriptors = torch.tensor(desc)
-
+    print("shape", descriptors.shape)
     return descriptors
 
   def _get_putative_matches(self, keypoints1, keypoints2, desc1, desc2, max_num_matches=500):
     distances = torch.cdist(desc1, desc2, p=2).cpu().numpy()
     
     # Add distance threshold
-    max_distance = 0.7  # Adjust this threshold
+    max_distance = 0.6
     
-    # Add ratio test
     matches = []
     for i in range(distances.shape[0]):
         # Get the two closest matches
         dist_i = distances[i, :]
         closest_two = np.partition(dist_i, 1)[:2]
         
-        # Apply ratio test
         if closest_two[0] < 0.75 * closest_two[1] and closest_two[0] < max_distance:
             j = np.argmin(dist_i)
             matches.append([
@@ -168,6 +165,7 @@ class ImageStitcher(object):
             ])
             
     matches = matches[:max_num_matches]
+
     return torch.tensor(matches)
       
   def _homography_inliers(self, H, matched_keypoints, inlier_threshold=10):
@@ -190,7 +188,6 @@ class ImageStitcher(object):
     inliers = distances < inlier_threshold ** 2
 
     return inliers, distances[inliers]
-
 
   def _visualize_inliers(self, img_left, img_right, matched_keypoints, inliers):
     """
@@ -241,6 +238,17 @@ class ImageStitcher(object):
   def _get_homography(self, matched_keypoints):
 
     matched_keypoints = matched_keypoints.float()
+
+    # Check the shape
+    if matched_keypoints.dim() == 1:
+        print("Reshaping matched_keypoints to 2D")
+        matched_keypoints = matched_keypoints.unsqueeze(0)  # Reshape to 2D if necessary
+
+    print("Shape of matched_keypoints:", matched_keypoints.shape)
+
+    # Ensure that matched_keypoints has the correct dimensions
+    if matched_keypoints.shape[1] != 4:
+        raise ValueError("Expected matched_keypoints to have shape [N, 4]")
 
     # Normalize coordinates
     p1 = matched_keypoints[:, :2]
@@ -319,13 +327,12 @@ class ImageStitcher(object):
       
       # Recompute homography using all inliers
       if best_inliers is not None and best_inliers.sum() >= 4:
-          print("Here!!")
           inlier_matches = matched_keypoints[best_inliers]
           best_homography = self._get_homography(inlier_matches)
       
       return best_inliers, best_homography, mean_residual
   
-  def stitch_images_new(self, img1, img2, H):
+  def stitch_images(self, img1, img2, H):
     # Convert tensors to numpy arrays
     img1_np = kornia.utils.tensor_to_image(img1.squeeze())  # Remove batch and channel dims
     img2_np = kornia.utils.tensor_to_image(img2.squeeze())

@@ -4,6 +4,11 @@ from scipy import signal
 from scipy import *
 import numpy as np
 from PIL import Image
+import numpy as np
+import cv2 
+import torch
+import torchvision.transforms as transforms
+
 ##############################################
 ### Provided code - nothing to change here ###
 ##############################################
@@ -42,7 +47,7 @@ Reference   (Code adapted from):
 """
 
 
-def harris(img, min_distance=10, threshold=0.1):
+def harris(img, min_distance=6, threshold=0.06):
   """
   image: h x w tensor (grayscale image). (It was filename before: Path of image file)
   threshold: (optional)Threshold for corner detection
@@ -183,5 +188,47 @@ def get_pixel_descriptors(image, keypoints, neighborhood_size=5):
             descriptors.append(descriptor)
 
     return descriptors
+
+def get_hynet_descriptors(image, keypoints, model):
+  descriptors = []
+
+  transform = transforms.Compose([
+      transforms.ToPILImage(),
+      transforms.Resize((224, 224)),
+      transforms.ToTensor(),
+      transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+  ])
+
+  for kp in keypoints:
+      y, x, _ = kp
+      y = int(y)
+      x = int(x)
+
+      neighborhood_size = 224
+      half_size = neighborhood_size // 2
+      
+      if (y - half_size >= 0 and y + half_size < image.shape[0] and 
+          x - half_size >= 0 and x + half_size < image.shape[1]):
+          neighborhood = image[y-half_size:y+half_size+1, x-half_size:x+half_size+1]
+          
+          if len(neighborhood.shape) == 2:  # Convert grayscale to RGB
+              neighborhood = np.stack([neighborhood]*3, axis=-1)
+
+          neighborhood = transform(neighborhood)
+          neighborhood = neighborhood.unsqueeze(0)
+          
+          with torch.no_grad():
+              model.eval()
+              features = model(neighborhood)
+              
+          descriptor = features.flatten().cpu().numpy()
+          descriptors.append(descriptor)
+
+  # Stack descriptors into a 2D NumPy array
+  descriptors = np.vstack(descriptors) if descriptors else np.empty((0, model.fc.out_features))
+
+  return descriptors
+
+
 
 
